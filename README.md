@@ -38,7 +38,7 @@ This process accurately transforms the grades according to your desired new aver
 
 ## How to Use
 
-1.  **Visit the Webpage:** Navigate to the application's URL (provided by the GitHub Pages deployment).
+1.  **Visit the Webpage:** Navigate to the application's URL (https://motilinbal.github.io/grades/).
 2.  **Paste Grades:** Copy your list of grades (remember, one grade on each line) and paste them into the text box.
 3.  **Analyze:** Click the "Analyze Grades" button.
     * You'll see the calculated average and spread appear on the sliders.
