@@ -21,6 +21,7 @@
             display: grid;
             grid-template-columns: 1fr 2fr;
             gap: 20px;
+            align-items: start;
         }
         .input-section, .output-section {
             background-color: #f9f9f9;
@@ -44,6 +45,7 @@
             border: 1px solid #ddd;
             border-radius: 4px;
             resize: vertical;
+            box-sizing: border-box;
         }
         button {
             background-color: #4CAF50;
@@ -68,6 +70,7 @@
         }
         .slider {
             flex-grow: 1;
+            cursor: pointer;
         }
         input[type="number"] {
             width: 60px;
@@ -75,26 +78,61 @@
             border: 1px solid #ddd;
             border-radius: 4px;
         }
-        .stats {
+        .stats-container {
+            display: flex;
+            justify-content: space-between;
+            gap: 25px;
             margin: 20px 0;
-            padding: 10px;
-            background-color: #e9f7ef;
+            flex-wrap: wrap;
+        }
+        .stats-column {
+            flex: 1;
+            min-width: 200px;
+            padding: 15px;
             border-radius: 4px;
+            font-size: 0.9em;
+        }
+        #initialStats {
+             background-color: #e9f7ef;
+             border: 1px solid #c8e6c9;
+        }
+        #currentStats {
+             background-color: #e0f7fa;
+             border: 1px solid #b2ebf2;
+        }
+        .stats-column h4 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #333;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 5px;
+        }
+        .stats-column p {
+            margin: 5px 0;
         }
         #plotContainer {
             height: 400px;
             width: 100%;
-            margin-top: 20px;
+            margin-top: 10px;
         }
-        .failure-count {
-            font-size: 1.2em;
+        .info-counts-container {
+             margin-top: 15px;
+             margin-bottom: 15px;
+        }
+        .info-count {
+            font-size: 1.1em;
             font-weight: bold;
-            color: #d9534f;
-            margin: 10px 0;
+            margin: 5px 0;
+             min-height: 1.2em;
         }
+        .failure-count { color: #d9534f; }
+         .above100-count { color: #f0ad4e; }
+         .reduced-count { color: #0275d8; }
         .error-message {
             color: #d9534f;
             font-weight: bold;
+            min-height: 1.2em;
+            margin-top: 10px;
         }
     </style>
 </head>
@@ -104,372 +142,214 @@
         <div class="input-section">
             <div class="control-group">
                 <label for="gradesInput">Grades:</label>
-                <textarea id="gradesInput" placeholder="Paste grades here, one per line..."></textarea>
+                <textarea id="gradesInput" placeholder="Paste grades here, one per line (numeric values)..."></textarea>
                 <button id="analyzeBtn">Analyze Grades</button>
             </div>
-            
             <div class="control-group">
                 <label for="failingThreshold">Failing Threshold:</label>
                 <div class="slider-container">
-                    <input type="range" id="failingThresholdSlider" min="0" max="100" value="60" class="slider">
-                    <input type="number" id="failingThresholdInput" min="0" max="100" value="60">
+                    <input type="range" id="failingThresholdSlider" min="0" max="100" value="60" step="0.1" class="slider">
+                    <input type="number" id="failingThresholdInput" min="0" max="100" value="60" step="0.1">
                 </div>
             </div>
-            
             <div class="control-group">
-                <label for="meanSlider">Mean:</label>
+                <label for="meanSlider">Target Mean:</label>
                 <div class="slider-container">
-                    <input type="range" id="meanSlider" min="0" max="100" value="70" step="0.1" class="slider" disabled>
-                    <input type="number" id="meanInput" min="0" max="100" value="70" step="0.1" disabled>
+                    <input type="range" id="meanSlider" min="-20" max="120" value="70" step="0.1" class="slider" disabled>
+                    <input type="number" id="meanInput" min="-20" max="120" value="70" step="0.1" disabled>
                 </div>
             </div>
-            
             <div class="control-group">
-                <label for="sdSlider">Standard Deviation:</label>
+                <label for="sdSlider">Target Standard Deviation:</label>
                 <div class="slider-container">
-                    <input type="range" id="sdSlider" min="0" max="30" value="10" step="0.1" class="slider" disabled>
-                    <input type="number" id="sdInput" min="0" max="30" value="10" step="0.1" disabled>
+                    <input type="range" id="sdSlider" min="0" max="50" value="10" step="0.1" class="slider" disabled>
+                    <input type="number" id="sdInput" min="0" max="50" value="10" step="0.1" disabled>
                 </div>
             </div>
+             <p id="errorMessage" class="error-message"></p>
         </div>
-        
+
         <div class="output-section">
-            <p id="errorMessage" class="error-message"></p>
-            <div class="stats" id="statsDisplay"></div>
-            <p class="failure-count" id="failureCount"></p>
+            <div class="stats-container">
+                <div class="stats-column" id="initialStats">
+                    <h4>Initial Statistics</h4>
+                    <p>Enter grades and click 'Analyze'.</p>
+                </div>
+                <div class="stats-column" id="currentStats">
+                     <h4>Current Statistics</h4>
+                     <p>No grades analyzed yet.</p>
+                </div>
+            </div>
+
+             <div class="info-counts-container">
+                 <p class="info-count above100-count" id="above100Count">Number Above 100: 0</p>
+                 <p class="info-count failure-count" id="failureCount">Number Failing: 0</p>
+                 <p class="info-count reduced-count" id="reducedCount">Grades Reduced: 0</p>
+             </div>
+
             <div id="plotContainer"></div>
         </div>
     </div>
 
-    <script>
-        // Store the original and normalized grade arrays
-        let originalGrades = [];
-        let normalizedGrades = [];
-        let hasValidGrades = false;
+<script>
+    // Global variables
+    let originalGrades = [];
+    let normalizedGrades = [];
+    let originalMean = 0;
+    let originalSD = 0;
+    let hasValidGrades = false;
 
-        // DOM Elements
-        const gradesInput = document.getElementById('gradesInput');
-        const analyzeBtn = document.getElementById('analyzeBtn');
-        const failingThresholdSlider = document.getElementById('failingThresholdSlider');
-        const failingThresholdInput = document.getElementById('failingThresholdInput');
-        const meanSlider = document.getElementById('meanSlider');
-        const meanInput = document.getElementById('meanInput');
-        const sdSlider = document.getElementById('sdSlider');
-        const sdInput = document.getElementById('sdInput');
-        const statsDisplay = document.getElementById('statsDisplay');
-        const failureCount = document.getElementById('failureCount');
-        const plotContainer = document.getElementById('plotContainer');
-        const errorMessage = document.getElementById('errorMessage');
+    // DOM Elements
+    const gradesInput = document.getElementById('gradesInput');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const failingThresholdSlider = document.getElementById('failingThresholdSlider');
+    const failingThresholdInput = document.getElementById('failingThresholdInput');
+    const meanSlider = document.getElementById('meanSlider');
+    const meanInput = document.getElementById('meanInput');
+    const sdSlider = document.getElementById('sdSlider');
+    const sdInput = document.getElementById('sdInput');
+    const initialStatsDiv = document.getElementById('initialStats');
+    const currentStatsDiv = document.getElementById('currentStats');
+    const failureCountDiv = document.getElementById('failureCount');
+    const above100CountDiv = document.getElementById('above100Count');
+    const reducedCountDiv = document.getElementById('reducedCount');
+    const plotContainer = document.getElementById('plotContainer');
+    const errorMessage = document.getElementById('errorMessage');
 
-        // Initial setup
-        initializeEventListeners();
+    // --- Event Listeners Setup ---
+    function initializeEventListeners() {
+        if (!analyzeBtn) { console.error("Analyze button not found!"); return; }
+        analyzeBtn.addEventListener('click', analyzeGrades);
+        failingThresholdSlider.addEventListener('input', handleThresholdChange);
+        failingThresholdInput.addEventListener('change', handleThresholdChange);
+        meanSlider.addEventListener('input', handleMeanSdChange);
+        meanInput.addEventListener('change', handleMeanSdChange);
+        sdSlider.addEventListener('input', handleMeanSdChange);
+        sdInput.addEventListener('change', handleMeanSdChange);
+    }
 
-        function initializeEventListeners() {
-            // Button click event
-            analyzeBtn.addEventListener('click', analyzeGrades);
-            
-            // Sync sliders with input boxes
-            failingThresholdSlider.addEventListener('input', function() {
-                failingThresholdInput.value = this.value;
-                if (hasValidGrades) updateDisplayedGrades();
-            });
-            
-            failingThresholdInput.addEventListener('input', function() {
-                failingThresholdSlider.value = this.value;
-                if (hasValidGrades) updateDisplayedGrades();
-            });
-            
-            meanSlider.addEventListener('input', function() {
-                meanInput.value = this.value;
-                if (hasValidGrades) updateDisplayedGrades();
-            });
-            
-            meanInput.addEventListener('input', function() {
-                meanSlider.value = this.value;
-                if (hasValidGrades) updateDisplayedGrades();
-            });
-            
-            sdSlider.addEventListener('input', function() {
-                sdInput.value = this.value;
-                if (hasValidGrades) updateDisplayedGrades();
-            });
-            
-            sdInput.addEventListener('input', function() {
-                sdSlider.value = this.value;
-                if (hasValidGrades) updateDisplayedGrades();
-            });
-        }
+    // --- Event Handlers ---
+    function handleThresholdChange(event) {
+         let inputElement = (event.target.type === 'range') ? failingThresholdInput : failingThresholdSlider;
+         let valueElement = event.target; let val = parseFloat(valueElement.value);
+         if (isNaN(val)) val = 60;
+         failingThresholdInput.value = val.toFixed(1); failingThresholdSlider.value = Math.max(0, Math.min(100, val));
+         if (hasValidGrades) { const g = getCurrentGradesFromInput(); updateCountsAndPlot(g, val); }
+    }
+    function handleMeanSdChange(event) {
+        let inputId, sliderId, value;
+        if (event.target.id===meanSlider.id || event.target.id===meanInput.id) { inputId=meanInput.id; sliderId=meanSlider.id; value=parseFloat(event.target.value); if(isNaN(value))value=70; }
+        else { inputId=sdInput.id; sliderId=sdSlider.id; value=parseFloat(event.target.value); if(isNaN(value)||value<0)value=0; }
+        document.getElementById(inputId).value = value.toFixed(1); document.getElementById(sliderId).value = value;
+        if (hasValidGrades) { updateDisplayedGrades(); }
+    }
+    function getCurrentGradesFromInput() { return gradesInput.value.split('\n').map(parseFloat).filter(g => !isNaN(g)); }
 
-        function analyzeGrades() {
-            // Clear previous messages
-            errorMessage.textContent = '';
-            
-            // Parse and validate grades
-            const inputText = gradesInput.value;
-            const lines = inputText.split('\n');
-            
-            originalGrades = [];
-            
-            // Parse and validate each line
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (trimmed === '') continue;
-                
-                const grade = parseFloat(trimmed);
-                if (!isNaN(grade) && grade >= 0 && grade <= 100) {
-                    originalGrades.push(grade);
-                }
-            }
-            
-            // Check if we have valid grades
-            if (originalGrades.length === 0) {
-                errorMessage.textContent = 'No valid grades found. Please enter numeric values between 0 and 100.';
-                clearOutputs();
-                hasValidGrades = false;
-                return;
-            }
-            
-            hasValidGrades = true;
-            
-            // Calculate statistics
-            const mean = calculateMean(originalGrades);
-            const sd = calculateStandardDeviation(originalGrades, mean);
-            
-            // Create normalized grades
-            normalizedGrades = normalizeGrades(originalGrades, mean, sd);
-            
-            // Update UI controls
-            meanSlider.value = mean.toFixed(1);
-            meanInput.value = mean.toFixed(1);
-            sdSlider.value = sd.toFixed(1);
-            sdInput.value = sd.toFixed(1);
-            
-            // Enable controls
-            meanSlider.disabled = false;
-            meanInput.disabled = false;
-            sdSlider.disabled = false;
-            sdInput.disabled = false;
-            
-            // Add dynamic range for mean and SD
-            const minGrade = Math.min(...originalGrades);
-            const maxGrade = Math.max(...originalGrades);
-            meanSlider.min = Math.max(0, minGrade - 20);
-            meanSlider.max = Math.min(100, maxGrade + 20);
-            meanInput.min = meanSlider.min;
-            meanInput.max = meanSlider.max;
-            
-            // Update display
-            updateStats(mean, sd);
-            updateDisplayedGrades();
-        }
-        
-        function calculateMean(grades) {
-            if (grades.length === 0) return 0;
-            const sum = grades.reduce((acc, grade) => acc + grade, 0);
-            return sum / grades.length;
-        }
-        
-        function calculateStandardDeviation(grades, mean) {
-            if (grades.length <= 1) return 0;
-            const sumSquaredDiff = grades.reduce((acc, grade) => {
-                const diff = grade - mean;
-                return acc + (diff * diff);
-            }, 0);
-            return Math.sqrt(sumSquaredDiff / grades.length);
-        }
-        
-        function normalizeGrades(grades, mean, sd) {
-            // Handle case where SD is 0
-            if (sd === 0) {
-                return grades.map(() => 0); // All normalized grades are 0 when SD is 0
-            }
-            
-            // Normal case
-            return grades.map(grade => (grade - mean) / sd);
-        }
-        
-        function updateStats(mean, sd) {
-            statsDisplay.innerHTML = `
-                <strong>Original Grades Statistics:</strong><br>
-                Number of Grades: ${originalGrades.length}<br>
-                Mean: ${mean.toFixed(2)}<br>
-                Standard Deviation: ${sd.toFixed(2)}<br>
-                Min: ${Math.min(...originalGrades).toFixed(2)}<br>
-                Max: ${Math.max(...originalGrades).toFixed(2)}
-            `;
-        }
-        
-        function updateDisplayedGrades() {
-            // Get current UI values
-            const currentMean = parseFloat(meanInput.value);
-            const currentSd = parseFloat(sdInput.value);
-            const threshold = parseFloat(failingThresholdInput.value);
-            
-            // Calculate displayed grades
-            let displayedGrades;
-            if (currentSd === 0) {
-                // When SD is 0, all grades equal to mean
-                displayedGrades = normalizedGrades.map(() => currentMean);
-            } else {
-                displayedGrades = normalizedGrades.map(normGrade => 
-                    (normGrade * currentSd) + currentMean
-                );
-            }
-            
-            // Calculate failing count
-            const failingCount = displayedGrades.filter(grade => grade < threshold).length;
-            failureCount.textContent = `Number of Failing Students: ${failingCount}`;
-            
-            // Update textbox
-            gradesInput.value = displayedGrades.map(grade => grade.toFixed(1)).join('\n');
-            
-            // Update the plot
-            generatePlot(displayedGrades, threshold);
-        }
-        
-        function generatePlot(grades, threshold) {
-            // Create KDE data points
-            const kdePoints = generateKDE(grades);
-            
-            // Find the failing portion of the curve
-            const failingKDE = kdePoints.filter(point => point.x < threshold);
-            
-            // Create the overall curve
-            const traceCurve = {
-                x: kdePoints.map(point => point.x),
-                y: kdePoints.map(point => point.y),
-                mode: 'lines',
-                name: 'Grade Distribution',
-                line: {
-                    color: 'blue',
-                    width: 2
-                },
-                hoverinfo: 'none'
-            };
-            
-            // Create the failing area
-            const traceFailing = {
-                x: failingKDE.map(point => point.x),
-                y: failingKDE.map(point => point.y),
-                fill: 'tozeroy',
-                mode: 'lines',
-                name: 'Failing Area',
-                line: {
-                    color: 'rgba(220, 53, 69, 0.7)',
-                    width: 0
-                },
-                fillcolor: 'rgba(220, 53, 69, 0.3)',
-                hoverinfo: 'none'
-            };
-            
-            // Create the threshold line
-            const traceThreshold = {
-                x: [threshold, threshold],
-                y: [0, Math.max(...kdePoints.map(p => p.y)) * 1.1],
-                mode: 'lines',
-                name: `Failing Threshold (${threshold})`,
-                line: {
-                    color: 'red',
-                    width: 2,
-                    dash: 'dash'
-                }
-            };
-            
-            // Plot layout
-            const layout = {
-                title: 'Grade Distribution',
-                xaxis: {
-                    title: 'Grade',
-                    range: [0, 100]
-                },
-                yaxis: {
-                    title: 'Probability Density',
-                    zeroline: true
-                },
-                showlegend: true,
-                margin: { t: 50, r: 50, b: 50, l: 50 },
-                hovermode: 'closest'
-            };
-            
-            // Plot the data
-            Plotly.newPlot(plotContainer, [traceCurve, traceFailing, traceThreshold], layout);
-        }
-        
-        function generateKDE(data) {
-            // A simple KDE implementation for smoothing grade distribution
-            const min = Math.min(...data) - 10;
-            const max = Math.max(...data) + 10;
-            
-            // If all data is the same, return a spike at that value
-            if (Math.min(...data) === Math.max(...data)) {
-                const singleValue = data[0];
-                return [
-                    { x: singleValue - 0.1, y: 0 },
-                    { x: singleValue, y: 1 },
-                    { x: singleValue + 0.1, y: 0 }
-                ];
-            }
-            
-            // Handle KDE calculation
-            const numPoints = 200;
-            const stepSize = (max - min) / numPoints;
-            const bandwidth = calculateBandwidth(data);
-            
-            // Generate points along x-axis
-            const kdePoints = [];
-            for (let i = 0; i <= numPoints; i++) {
-                const x = min + (stepSize * i);
-                let y = 0;
-                
-                // Calculate density at point x
-                for (const dataPoint of data) {
-                    // Gaussian kernel
-                    const z = (x - dataPoint) / bandwidth;
-                    y += Math.exp(-0.5 * z * z) / (bandwidth * Math.sqrt(2 * Math.PI));
-                }
-                
-                y /= data.length; // Normalize
-                kdePoints.push({ x, y });
-            }
-            
-            return kdePoints;
-        }
-        
-        function calculateBandwidth(data) {
-            // Silverman's rule of thumb for bandwidth selection
-            const n = data.length;
-            const sd = calculateStandardDeviation(data, calculateMean(data));
-            
-            // If SD is 0 or very small, use a small default bandwidth
-            if (sd < 0.001) return 1;
-            
-            // IQR-based estimator with fallback
-            const sortedData = [...data].sort((a, b) => a - b);
-            const q1Index = Math.floor(n * 0.25);
-            const q3Index = Math.floor(n * 0.75);
-            const iqr = sortedData[q3Index] - sortedData[q1Index];
-            
-            // If IQR is 0, use SD-based estimator
-            if (iqr === 0) {
-                return 0.9 * sd * Math.pow(n, -0.2);
-            }
-            
-            // Use min of SD and IQR/1.34
-            const h = 0.9 * Math.min(sd, iqr / 1.34) * Math.pow(n, -0.2);
-            return h;
-        }
-        
-        function clearOutputs() {
-            statsDisplay.innerHTML = '';
-            failureCount.textContent = '';
-            Plotly.purge(plotContainer);
-            
-            // Disable controls
-            meanSlider.disabled = true;
-            meanInput.disabled = true;
-            sdSlider.disabled = true;
-            sdInput.disabled = true;
-        }
-    </script>
+    // --- Core Logic ---
+    function analyzeGrades() {
+        errorMessage.textContent = ''; let rawGrades = []; const lines = gradesInput.value.split('\n');
+        for (const line of lines) { const t = line.trim(); if (t === '') continue; let g = parseFloat(t); if (!isNaN(g)) rawGrades.push(g); }
+        if (rawGrades.length === 0) { errorMessage.textContent = 'No valid numeric grades found.'; clearOutputs(); return; }
+        originalGrades = [...rawGrades]; hasValidGrades = true;
+        originalMean = calculateMean(originalGrades); originalSD = calculateStandardDeviation(originalGrades);
+        if (originalSD < 1e-9) { normalizedGrades = originalGrades.map(() => 0); originalSD = 0; }
+        else { normalizedGrades = originalGrades.map(g => (g - originalMean) / originalSD); }
+        meanSlider.value=originalMean.toFixed(1); meanInput.value=originalMean.toFixed(1); sdSlider.value=originalSD.toFixed(1); sdInput.value=originalSD.toFixed(1);
+        meanSlider.disabled=false; meanInput.disabled=false; sdSlider.disabled=false; sdInput.disabled=false;
+        const minG=Math.min(...originalGrades); const maxG=Math.max(...originalGrades);
+        meanSlider.min=Math.floor(minG-originalSD*2); meanSlider.max=Math.ceil(maxG+originalSD*2); meanInput.min=meanSlider.min; meanInput.max=meanSlider.max;
+        sdSlider.max=Math.max(10,Math.ceil(originalSD*3)); sdInput.max=sdSlider.max;
+        displayStats(initialStatsDiv, "Initial Statistics", originalGrades); displayStats(currentStatsDiv, "Current Statistics", originalGrades);
+        gradesInput.value = originalGrades.map(g => g.toFixed(1)).join('\n');
+        const initialThreshold = parseFloat(failingThresholdInput.value); updateCountsAndPlot(originalGrades, initialThreshold);
+    }
+    function calculateMean(grades) { if (grades.length === 0) return 0; return grades.reduce((a, b) => a + b, 0) / grades.length; }
+    function calculateStandardDeviation(grades) { if (grades.length <= 1) return 0; const m = calculateMean(grades); const v = grades.reduce((a, b) => a + Math.pow(b - m, 2), 0) / grades.length; return Math.sqrt(v); }
+     function displayStats(targetDiv, title, grades) {
+         if (!grades || grades.length === 0) { targetDiv.innerHTML = `<h4>${title}</h4><p>No grades.</p>`; return; }
+         const c=grades.length; const m=calculateMean(grades); const s=calculateStandardDeviation(grades); const mn=Math.min(...grades); const mx=Math.max(...grades);
+         targetDiv.innerHTML = `<h4>${title}</h4><p>Count: ${c}</p><p>Mean: ${m.toFixed(2)}</p><p>Std Dev: ${s.toFixed(2)}</p><p>Min: ${mn.toFixed(2)}</p><p>Max: ${mx.toFixed(2)}</p>`;
+     }
+
+    // --- Update Functions ---
+     function updateCountsAndPlot(grades, threshold) {
+         if (!grades || grades.length === 0) {
+            failureCountDiv.textContent = 'Number Failing: 0'; above100CountDiv.textContent = 'Number Above 100: 0'; reducedCountDiv.textContent = 'Grades Reduced: 0';
+            generatePlot(grades, threshold); return;
+         }
+         updateFailureCount(grades, threshold); updateAbove100Count(grades); updateReducedCount(originalGrades, grades);
+         generatePlot(grades, threshold);
+     }
+     function updateFailureCount(grades, threshold) { const fc = grades.filter(g => g < threshold).length; failureCountDiv.textContent = `Number Failing (below ${threshold.toFixed(1)}): ${fc}`; }
+    function updateAbove100Count(grades) { const ac = grades.filter(g => g > 100).length; above100CountDiv.textContent = `Number Above 100: ${ac}`; }
+    function updateReducedCount(initialGrades, currentGrades) {
+        if (initialGrades.length !== currentGrades.length || initialGrades.length === 0) { reducedCountDiv.textContent = 'Grades Reduced: 0'; return; }
+        let dCnt = 0; let tDec = 0;
+        for (let i=0; i<initialGrades.length; i++) { const diff = initialGrades[i] - currentGrades[i]; if (diff > 1e-6) { dCnt++; tDec += diff; } }
+        if (dCnt > 0) { const avgDec = tDec / dCnt; reducedCountDiv.textContent = `Grades Reduced: ${dCnt} (Avg. Decrease: ${avgDec.toFixed(1)} points)`; }
+        else { reducedCountDiv.textContent = `Grades Reduced: 0`; }
+    }
+    function updateDisplayedGrades() {
+        if (!hasValidGrades) return;
+        const targetMean = parseFloat(meanInput.value); const targetSD = parseFloat(sdInput.value);
+        const threshold = parseFloat(failingThresholdInput.value); let displayedGrades = [];
+        if (originalSD === 0) { displayedGrades = originalGrades.map(() => targetMean); }
+        else { displayedGrades = normalizedGrades.map(z => (z * targetSD) + targetMean); }
+        gradesInput.value = displayedGrades.map(g => g.toFixed(1)).join('\n');
+        displayStats(currentStatsDiv, "Current Statistics", displayedGrades);
+        updateCountsAndPlot(displayedGrades, threshold);
+        errorMessage.textContent = '';
+    }
+
+    // --- Plotting Function ---
+    function generatePlot(grades, threshold) {
+         if (typeof Plotly === 'undefined') { console.error("Plotly not loaded."); return; }
+         if (!grades || grades.length === 0) { Plotly.purge(plotContainer); return; }
+         const kdePoints = generateKDE(grades);
+         if (!kdePoints || kdePoints.length === 0) { Plotly.purge(plotContainer); return; }
+         const failingKDE = kdePoints.filter(p=>p.x < threshold); const fX=failingKDE.map(p=>p.x); const fY=failingKDE.map(p=>p.y);
+         if (fX.length > 0) { fX.unshift(fX[0]); fY.unshift(0); fX.push(fX[fX.length-1]); fY.push(0); }
+         const traceCurve = { x: kdePoints.map(p=>p.x), y: kdePoints.map(p=>p.y), mode:'lines', name:'Grade Distribution', line:{color:'rgb(31, 119, 180)',width:2}, hoverinfo:'none' };
+         const traceFailing = { x:fX, y:fY, fill:'tozeroy', mode:'lines', name:'Failing Area', line:{color:'rgba(214, 39, 40, 0)',width:0}, fillcolor:'rgba(214, 39, 40, 0.3)', hoverinfo:'none' };
+         const maxY=Math.max(1e-9,...kdePoints.map(p=>p.y));
+         const traceThreshold = { x:[threshold,threshold], y:[0,maxY*1.1], mode:'lines', name:`Failing Threshold (${threshold.toFixed(1)})`, line:{color:'rgb(255, 127, 14)',width:2,dash:'dash'} };
+         const minG=Math.min(...grades); const maxG=Math.max(...grades);
+         const xR=[Math.min(-5,Math.floor(minG-10)),Math.max(105,Math.ceil(maxG+10))];
+         const layout={title:'Grade Distribution Density',xaxis:{title:'Grade',range:xR},yaxis:{title:'Probability Density',rangemode:'tozero',fixedrange:true},showlegend:true,legend:{x:0.05,y:0.99,bgcolor:'rgba(255,255,255,0.6)',bordercolor:'rgba(0,0,0,0.2)',borderwidth:1},margin:{t:50,r:20,b:50,l:60},hovermode:'closest'};
+        // *** THE FIX IS HERE ***
+        Plotly.react(plotContainer, [traceCurve, traceFailing, traceThreshold], layout); // Use traceThreshold, not tThresh
+    }
+
+    // --- KDE and Bandwidth Functions ---
+    function generateKDE(data) {
+         if (!data || data.length === 0) return []; const n=data.length; let mn=Math.min(...data); let mx=Math.max(...data);
+         if (Math.abs(mx-mn)<1e-9){const v=data[0]; const w=0.5; return [{x:v-w,y:0},{x:v,y:1},{x:v+w,y:0}];}
+         const sd=calculateStandardDeviation(data); const bw=calculateBandwidth(data); const pMin=mn-3*Math.max(sd,bw); const pMax=mx+3*Math.max(sd,bw);
+         const nPts=200; const pts=[]; for(let i=0;i<=nPts;i++){const x=pMin+(pMax-pMin)*(i/nPts); let y=0; for(const dp of data){const z=(x-dp)/bw; y+=Math.exp(-0.5*z*z);} y/=(n*bw*Math.sqrt(2*Math.PI)); pts.push({x,y});} return pts;
+    }
+     function calculateBandwidth(data) {
+         const n=data.length; if(n<=1)return 1; const m=calculateMean(data); const s=calculateStandardDeviation(data); if(s<1e-6)return 0.5;
+         const sorted=[...data].sort((a,b)=>a-b); const q1i=Math.floor(n*0.25); const q3i=Math.ceil(n*0.75); const q1=sorted[Math.max(0,q1i)]; const q3=sorted[Math.min(n-1,q3i)]; const iqr=q3-q1;
+         const rSD=(iqr>0)?Math.min(s,iqr/1.349):s; const b=1.059*rSD*Math.pow(n,-0.2); return Math.max(0.5,b);
+     }
+
+    // --- Clear Outputs Function ---
+    function clearOutputs() {
+        initialStatsDiv.innerHTML = `<h4>Initial Statistics</h4><p>Enter grades and click 'Analyze'.</p>`;
+        currentStatsDiv.innerHTML = `<h4>Current Statistics</h4><p>No grades analyzed yet.</p>`;
+        // Set counts to 0
+        failureCountDiv.textContent = 'Number Failing: 0';
+        above100CountDiv.textContent = 'Number Above 100: 0';
+        reducedCountDiv.textContent = 'Grades Reduced: 0';
+        errorMessage.textContent = '';
+        if (typeof Plotly !== 'undefined') Plotly.purge(plotContainer);
+        meanSlider.disabled = true; meanInput.disabled = true; sdSlider.disabled = true; sdInput.disabled = true;
+        hasValidGrades = false; originalGrades = []; normalizedGrades = []; originalMean = 0; originalSD = 0;
+    }
+
+    // --- Initialize ---
+    document.addEventListener('DOMContentLoaded', initializeEventListeners);
+
+</script>
 </body>
 </html>
